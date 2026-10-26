@@ -1,4 +1,6 @@
 __pycache__/
+yolov8s.pt
+yolov8n.pt
 */py[cod]
 .venv/
 venv/
@@ -6,3 +8,5 @@ venv/
 .idea/
 .vscode/
 *.pt
+*.jpg
+.pt

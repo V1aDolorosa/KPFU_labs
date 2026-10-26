@@ -15,6 +15,7 @@ headers = {"User-Agent": "Mozilla/5.0"}
 resp = requests.get(image_url, headers=headers, timeout=15)
 resp.raise_for_status()
 img = Image.open(BytesIO(resp.content)).convert("RGB")
+img_first_array = np.array(img)
 
 plt.figure(figsize=(8,6))
 plt.imshow(img)
@@ -73,8 +74,8 @@ plt.title("Результат детекции (только 'person+Cat')")
 plt.show()
 
 
-# ------------- THREE -------------
-image_url = "https://cubeupload.com/im/via/lab3.jpg"
+# ------------- THREE & Four-------------
+image_url = "https://u.cubeupload.com/via/lab33.jpg"
 
 resp = requests.get(image_url, headers=headers, timeout=15)
 resp.raise_for_status()
@@ -88,3 +89,84 @@ plt.axis("off")
 plt.title("Новое изображение")
 plt.show()
 
+for conf in [0.25, 0.35, 0.5]:
+    res_conf = model_n.predict(
+        source=img_array,
+        conf=conf,
+        iou=0.45,
+        classes=[0],
+        verbose=False
+    )[0]
+
+    print(f"conf={conf}: детекций людей — {len(res_conf.boxes)}")
+
+#--------- FIVE & SIX -----------------
+
+# Только люди на новом изображении
+res = model_n.predict(
+    source=img_array,
+    conf=0.3,
+    iou=0.2,
+    classes=[0],
+    verbose=False
+)[0]
+
+# Задание 5: количество людей
+print(len(res.boxes))
+
+# Задание 6: сохранить результаты
+Image.fromarray(res.plot()).save("people_result.jpg")
+
+print("Результаты сохранены!")
+
+#-------- SEVEN -------------
+for name, model in [("YOLOv8n", model_n), ("YOLOv8s", model_s)]:
+    res_model = model.predict(
+        source=img_array,
+        conf=0.25,
+        iou=0.45,
+        classes=[0, 15],
+        verbose=False
+    )[0]
+
+    print(f"{name}: {len(res_model.boxes)} объектов")
+
+    plt.figure(figsize=(10, 8))
+    plt.imshow(res_model.plot())
+    plt.axis("off")
+    plt.title(name)
+    plt.show()
+
+
+
+#----------- EIGHT -----------
+
+h, w = img_first_array.shape[:2]
+
+res_first = model_n.predict(
+    source=img_first_array,
+    conf=0.45,
+    classes=[0],
+    verbose=False
+)[0]
+
+large = [
+    b for b in res_first.boxes
+    if (b.xyxy[0][2] - b.xyxy[0][0]) *
+       (b.xyxy[0][3] - b.xyxy[0][1]) >= 0.03 * w * h
+]
+
+print("Крупных людей:", len(large))
+
+fig, ax = plt.subplots(figsize=(10, 8))
+ax.imshow(img_first_array)
+
+for b in large:
+    x1, y1, x2, y2 = map(int, b.xyxy[0].tolist())
+    ax.add_patch(plt.Rectangle(
+        (x1, y1), x2 - x1, y2 - y1,
+        fill=False, edgecolor="red", linewidth=2
+    ))
+
+ax.axis("off")
+plt.show()
