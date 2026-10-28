@@ -1,0 +1,12 @@
+Лучшая модель: CNN с BatchNormalization
+Validation accuracy: 0.3810
+
+              precision    recall  f1-score   support
+
+        Audi       0.00      0.00      0.00         7
+         BMW       0.35      1.00      0.52         7
+       VOLVO       1.00      0.14      0.25         7
+
+    accuracy                           0.38        21
+   macro avg       0.45      0.38      0.26        21
+weighted avg       0.45      0.38      0.26        21

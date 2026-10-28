@@ -1,0 +1,4 @@
+﻿experiment,name,img_size,batch_norm,val_accuracy,val_loss,epochs_trained
+"Базовая CNN, 128x128",baseline_128,128,False,0.3333333432674408,1.1013946533203125,5
+"CNN, 160x160",imgsize_160,160,False,0.3333333432674408,1.1020097732543945,5
+CNN с BatchNormalization,batchnorm_128,128,True,0.380952388048172,1.1006361246109009,6
