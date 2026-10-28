@@ -1,6 +1,10 @@
 {
+  "best_experiment": "Эксперимент 2: усиленная аугментация",
   "img_size": 128,
-  "experiment": "CNN с BatchNormalization",
-  "validation_accuracy": 0.380952388048172,
-  "seed": 42
+  "val_accuracy": 0.5714285969734192,
+  "classes": [
+    "Audi",
+    "BMW",
+    "VOLVO"
+  ]
 }

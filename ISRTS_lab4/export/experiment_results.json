@@ -1,0 +1,29 @@
+[
+  {
+    "experiment":"Базовая модель",
+    "img_size":128,
+    "augmentation":"standard",
+    "epochs_requested":12,
+    "epochs_run":9,
+    "val_accuracy":0.4761904776,
+    "val_loss":1.0904935598
+  },
+  {
+    "experiment":"Эксперимент 1: IMG_SIZE = 160",
+    "img_size":160,
+    "augmentation":"standard",
+    "epochs_requested":12,
+    "epochs_run":4,
+    "val_accuracy":0.380952388,
+    "val_loss":1.2578704357
+  },
+  {
+    "experiment":"Эксперимент 2: усиленная аугментация",
+    "img_size":128,
+    "augmentation":"strong",
+    "epochs_requested":18,
+    "epochs_run":11,
+    "val_accuracy":0.571428597,
+    "val_loss":1.4020483494
+  }
+]
