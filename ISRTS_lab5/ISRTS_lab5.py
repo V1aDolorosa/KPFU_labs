@@ -12,22 +12,18 @@ from ultralytics import YOLO
 # -------------------- НАСТРОЙКИ --------------------
 
 VIDEO_PATH = Path(__file__).resolve().parent / "video.mp4"
+OUTPUT_FOLDER = Path(__file__).resolve().parent / "yolo_results"
 WEIGHTS = "yolov8n.pt"
 TARGET_NAMES = ["person", "car", "bus"]
 CONFIDENCE = 0.5
 THRESHOLDS = [0.2, 0.5, 0.8]
 IMAGE_SIZE = 640
-# Кадры для ручной проверки
-SAMPLE_TIMES = [0, 3, 6, 9, 11]
-# Дополнительное задание
-RUN_TRACKING = True
-TRACK_CLASS = "car"
-
-OUTPUT_FOLDER = Path(__file__).resolve().parent / "yolo_results"
-
-
+SAMPLE_SECONDS = [0, 3, 6, 9, 11]
 
 OUTPUT_FOLDER.mkdir(exist_ok=True)
+
+
+# -------------------- ЗАДАНИЕ 1. ПОДГОТОВКА СРЕДЫ --------------------
 
 print("Ultralytics:", ultralytics.__version__)
 print("OpenCV:", cv2.__version__)
@@ -41,11 +37,10 @@ else:
 print("Устройство:", DEVICE)
 
 
+# -------------------- ЗАДАНИЕ 2. ЗАГРУЗКА ВИДЕО --------------------
+
 if not VIDEO_PATH.exists():
-    raise FileNotFoundError(
-        "Видео не найдено. Положите его рядом со скриптом "
-        "и назовите video.mp4."
-    )
+    raise FileNotFoundError("Видео video.mp4 не найдено.")
 
 cap = cv2.VideoCapture(str(VIDEO_PATH))
 
@@ -62,22 +57,30 @@ if not ret:
     raise RuntimeError("Не удалось прочитать первый кадр.")
 
 if fps <= 0:
-    raise ValueError("Не удалось определить FPS видео.")
+    raise ValueError("Не удалось определить FPS.")
 
 height, width = first_frame.shape[:2]
 
-print("Размер кадра:", width, "x", height)
+video_size = (width + width % 2, height + height % 2)
+
+print("Размер видео:", width, "x", height)
 print("FPS:", fps)
 print("Количество кадров:", frame_count)
-print("Длительность:", round(frame_count / fps, 2), "секунд")
 
 
-# -------------------- 2. ЗАГРУЗКА МОДЕЛИ --------------------
+# Переводим секунды контрольных кадров в номера кадров
+
+sample_frames = []
+
+for second in SAMPLE_SECONDS:
+    sample_frames.append(round(second * fps))
+
+
+# -------------------- ЗАДАНИЕ 3. ЗАГРУЗКА МОДЕЛИ --------------------
 
 model = YOLO(WEIGHTS)
 
-print("Классы модели:")
-print(model.names)
+# -------------------- ЗАДАНИЕ 4. ВЫБОР КЛАССОВ --------------------
 
 name_to_id = {}
 
@@ -88,22 +91,16 @@ for name in TARGET_NAMES:
     if name not in name_to_id:
         raise ValueError("Такого класса нет в модели: " + name)
 
-if len(TARGET_NAMES) < 3:
-    raise ValueError("Нужно выбрать минимум три класса.")
-
-if len(set(TARGET_NAMES)) != len(TARGET_NAMES):
-    raise ValueError("Названия классов не должны повторяться.")
+if len(TARGET_NAMES) < 3 or len(set(TARGET_NAMES)) != len(TARGET_NAMES):
+    raise ValueError("Укажите минимум три разных класса.")
 
 TARGET_IDS = []
 
 for name in TARGET_NAMES:
     TARGET_IDS.append(name_to_id[name])
 
-print("Выбранные классы:", TARGET_NAMES)
-print("ID классов:", TARGET_IDS)
 
-
-# -------------------- 3. ПРОВЕРКА ПЕРВОГО КАДРА --------------------
+# -------------------- ЗАДАНИЕ 3. ОБНАРУЖЕНИЕ НА ПЕРВОМ КАДРЕ --------------------
 
 result = model.predict(
     source=first_frame,
@@ -113,65 +110,26 @@ result = model.predict(
     verbose=False
 )[0]
 
-# Сохраняем изображение с найденными объектами
-
-preview = result.plot()
-
 cv2.imwrite(
     str(OUTPUT_FOLDER / "first_frame_preview.jpg"),
-    preview
+    result.plot()
 )
 
-print("Обнаружения на первом кадре:")
 
-for box in result.boxes:
-
-    class_id = int(box.cls.item())
-    class_name = model.names[class_id]
-    confidence = float(box.conf.item())
-
-    x1, y1, x2, y2 = box.xyxy[0].cpu().tolist()
-
-    center_x = (x1 + x2) / 2
-    center_y = (y1 + y2) / 2
-
-    print("Класс:", class_name)
-    print("Confidence:", round(confidence, 3))
-
-    print(
-        "Рамка:",
-        round(x1, 1),
-        round(y1, 1),
-        round(x2, 1),
-        round(y2, 1)
-    )
-
-    print(
-        "Центр:",
-        round(center_x, 1),
-        round(center_y, 1)
-    )
-
-    print("--------------------")
-
-
-# -------------------- 4. ОБРАБОТКА ВИДЕО --------------------
-
-sample_frames = []
-
-for second in SAMPLE_TIMES:
-    sample_frames.append(round(second * fps))
+# -------------------- ЗАДАНИЕ 5. ОБРАБОТКА ВИДЕО --------------------
 
 summary = []
 
+main_detections = None
+main_counts = None
+main_folder = None
 
 for threshold in THRESHOLDS:
 
-    print("\nОбработка видео. Порог:", threshold)
+    result_folder = OUTPUT_FOLDER / (
+        "run_conf_" + str(int(threshold * 100)).zfill(3)
+    )
 
-    folder_name = "run_conf_" + str(int(threshold * 100)).zfill(3)
-
-    result_folder = OUTPUT_FOLDER / folder_name
     result_folder.mkdir(exist_ok=True)
 
     samples_folder = result_folder / "samples"
@@ -180,24 +138,17 @@ for threshold in THRESHOLDS:
     detections = []
     frame_counts = []
 
-    save_video = (threshold == CONFIDENCE)
-
     writer = None
 
-    if save_video:
+    # Размеченное видео сохраняем при основном пороге 0.5
 
-        output_video = result_folder / "annotated.mp4"
-
-        output_width = width + width % 2
-        output_height = height + height % 2
-
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    if threshold == CONFIDENCE:
 
         writer = cv2.VideoWriter(
-            str(output_video),
-            fourcc,
+            str(result_folder / "annotated.mp4"),
+            cv2.VideoWriter_fourcc(*"mp4v"),
             fps,
-            (output_width, output_height)
+            video_size
         )
 
         if not writer.isOpened():
@@ -215,10 +166,10 @@ for threshold in THRESHOLDS:
 
     for frame_number, result in enumerate(results):
 
-        counts = {}
+        counts = {name: 0 for name in TARGET_NAMES}
 
-        for name in TARGET_NAMES:
-            counts[name] = 0
+        # Сохраняем информацию о каждом обнаруженном объекте
+
         for box in result.boxes:
 
             class_id = int(box.cls.item())
@@ -227,7 +178,9 @@ for threshold in THRESHOLDS:
 
             x1, y1, x2, y2 = box.xyxy[0].cpu().tolist()
 
-            center_x
+            center_x = (x1 + x2) / 2
+            center_y = (y1 + y2) / 2
+
             detections.append({
                 "frame": frame_number,
                 "class_name": class_name,
@@ -242,65 +195,61 @@ for threshold in THRESHOLDS:
 
             counts[class_name] += 1
 
-        # Сохраняем количество объектов на каждом кадре
+        # Сохраняем количество объектов на текущем кадре
 
-        frame_row = {
-            "frame": frame_number,
-            "time_s": frame_number / fps
-        }
+        frame_row = {"frame": frame_number}
 
         for name in TARGET_NAMES:
             frame_row[name] = counts[name]
 
         frame_counts.append(frame_row)
 
-        # Сохраняем пять кадров для ручной проверки
+        # Сохраняем контрольные кадры и размеченное видео
 
-        if frame_number in sample_frames:
-
-            sample_image = result.plot()
-
-            sample_name = (
-                "frame_" + str(frame_number).zfill(4) + ".jpg"
-            )
-
-            cv2.imwrite(
-                str(samples_folder / sample_name),
-                sample_image
-            )
-
-        # Записываем видео с рамками
-
-        if save_video:
+        if frame_number in sample_frames or writer is not None:
 
             annotated = result.plot()
 
-            if width % 2 != 0 or height % 2 != 0:
+            if frame_number in sample_frames:
 
-                annotated = cv2.copyMakeBorder(
-                    annotated,
-                    0,
-                    height % 2,
-                    0,
-                    width % 2,
-                    cv2.BORDER_CONSTANT,
-                    value=(0, 0, 0)
+                sample_name = (
+                    "frame_" + str(frame_number).zfill(4) + ".jpg"
                 )
 
-            writer.write(annotated)
+                cv2.imwrite(
+                    str(samples_folder / sample_name),
+                    annotated
+                )
+
+            if writer is not None:
+
+                if width % 2 != 0 or height % 2 != 0:
+
+                    annotated = cv2.copyMakeBorder(
+                        annotated,
+                        0,
+                        height % 2,
+                        0,
+                        width % 2,
+                        cv2.BORDER_CONSTANT,
+                        value=(0, 0, 0)
+                    )
+
+                writer.write(annotated)
 
     results.close()
 
     if writer is not None:
         writer.release()
 
-    # Создаём таблицу обнаружений
+    # Создаём CSV-файлы
 
     detections_df = pd.DataFrame(
         detections,
         columns=[
             "frame", "class_name", "confidence",
-            "x1", "y1", "x2", "y2", "center_x", "center_y"
+            "x1", "y1", "x2", "y2",
+            "center_x", "center_y"
         ]
     )
 
@@ -318,21 +267,7 @@ for threshold in THRESHOLDS:
         encoding="utf-8-sig"
     )
 
-    print("Обработано кадров:", len(counts_df))
-    print("Всего обнаружений:", len(detections_df))
-
-    for name in TARGET_NAMES:
-
-        summary.append({
-            "conf": threshold,
-            "class_name": name,
-            "frames": len(counts_df),
-            "detections_sum": int(counts_df[name].sum()),
-            "mean_per_frame": round(
-                float(counts_df[name].mean()), 3
-            ),
-            "max_per_frame": int(counts_df[name].max())
-        })
+    # Запоминаем результаты основного порога
 
     if threshold == CONFIDENCE:
 
@@ -340,41 +275,24 @@ for threshold in THRESHOLDS:
         main_counts = counts_df
         main_folder = result_folder
 
-
-# -------------------- 5. СРАВНЕНИЕ ПОРОГОВ --------------------
-
-summary_df = pd.DataFrame(summary)
-
-summary_df.to_csv(
-    OUTPUT_FOLDER / "threshold_comparison.csv",
-    index=False,
-    encoding="utf-8-sig"
-)
-
-print("\nСравнение порогов:")
-print(summary_df)
-
-
-# -------------------- 6. ГРАФИК И РЕЗУЛЬТАТЫ --------------------
-
 print("\nПервые три обнаружения при conf = 0.5:")
-print(main_detections.head(3))
-
-print("\nСреднее и максимальное количество объектов:")
 
 print(
-    main_counts[TARGET_NAMES].agg(["mean", "max"])
+    main_detections.head(3).to_string(index=False)
 )
 
+
+# -------------------- ЗАДАНИЕ 6. ПОСТРОЕНИЕ ГРАФИКА --------------------
+
 ax = main_counts.plot(
-    x="time_s",
+    x="frame",
     y=TARGET_NAMES,
     figsize=(10, 4),
     drawstyle="steps-post"
 )
 
-ax.set_xlabel("Время видео, секунд")
-ax.set_ylabel("Количество объектов в кадре")
+ax.set_xlabel("Номер кадра")
+ax.set_ylabel("Количество объектов")
 ax.set_title("Количество объектов при conf = 0.5")
 
 ax.grid(True, alpha=0.3)
@@ -388,71 +306,176 @@ plt.savefig(
 plt.show()
 
 
-# -------------------- 7. ДОПОЛНИТЕЛЬНОЕ ЗАДАНИЕ: BYTETRACK --------------------
+# -------------------- ЗАДАНИЕ 7. СРАВНЕНИЕ ПОРОГОВ --------------------
 
-if RUN_TRACKING:
+for threshold in THRESHOLDS:
 
-    if TRACK_CLASS not in name_to_id:
-        raise ValueError("Выбранного класса нет в модели.")
-
-    track_model = YOLO(WEIGHTS)
-
-    # Вертикальная линия посередине кадра
-
-    line_x = width / 2
-
-    last_side = {}
-    crossed_ids = set()
-
-    track_results = track_model.track(
-        source=str(VIDEO_PATH),
-        stream=True,
-        tracker="bytetrack.yaml",
-        conf=CONFIDENCE,
-        classes=[name_to_id[TRACK_CLASS]],
-        imgsz=IMAGE_SIZE,
-        device=DEVICE,
-        verbose=False
+    result_folder = OUTPUT_FOLDER / (
+        "run_conf_" + str(int(threshold * 100)).zfill(3)
     )
 
-    for result in track_results:
+    counts_df = pd.read_csv(result_folder / "counts.csv")
 
-        boxes = result.boxes
+    for name in TARGET_NAMES:
 
-        if boxes.id is not None:
+        summary.append({
+            "conf": threshold,
+            "class_name": name,
+            "mean_per_frame": round(
+                float(counts_df[name].mean()), 3
+            ),
+            "max_per_frame": int(counts_df[name].max())
+        })
 
-            track_ids = boxes.id.int().cpu().tolist()
-            centers_x = boxes.xywh[:, 0].cpu().tolist()
+summary_df = pd.DataFrame(summary)
 
-            for track_id, center_x in zip(track_ids, centers_x):
-
-                if center_x < line_x:
-                    side = -1
-                else:
-                    side = 1
-
-                if track_id in last_side:
-
-                    if last_side[track_id] != side:
-                        crossed_ids.add(track_id)
-
-                last_side[track_id] = side
-
-    track_results.close()
-
-    print("\nКласс для отслеживания:", TRACK_CLASS)
-
-    print(
-        "Количество траекторий с пересечением:",
-        len(crossed_ids)
-    )
-
-    print("ID траекторий:", crossed_ids)
-
-
-print("\nОбработка завершена.")
-
-print(
-    "Результаты находятся в папке:",
-    OUTPUT_FOLDER.resolve()
+summary_df.to_csv(
+    OUTPUT_FOLDER / "threshold_comparison.csv",
+    index=False,
+    encoding="utf-8-sig"
 )
+
+print("\nСравнение порогов:")
+print(summary_df.to_string(index=False))
+
+
+# -------------------- ДОПОЛНИТЕЛЬНОЕ ЗАДАНИЕ. BYTETRACK --------------------
+
+# Отслеживаем автомобили и считаем пересечение вертикальной линии
+
+line_x = width // 2
+
+last_side = {}
+crossed_ids = set()
+
+tracking_video = OUTPUT_FOLDER / "tracking_line.mp4"
+
+track_writer = cv2.VideoWriter(
+    str(tracking_video),
+    cv2.VideoWriter_fourcc(*"mp4v"),
+    fps,
+    video_size
+)
+
+if not track_writer.isOpened():
+    raise RuntimeError("Не удалось создать видео отслеживания.")
+
+track_results = model.track(
+    source=str(VIDEO_PATH),
+    stream=True,
+    persist=True,
+    tracker="bytetrack.yaml",
+    conf=CONFIDENCE,
+    classes=[name_to_id["car"]],
+    imgsz=IMAGE_SIZE,
+    device=DEVICE,
+    verbose=False
+)
+
+for result in track_results:
+
+    boxes = result.boxes
+
+    track_ids = []
+    coordinates = []
+
+    if boxes.id is not None:
+
+        track_ids = boxes.id.int().cpu().tolist()
+        centers_x = boxes.xywh[:, 0].cpu().tolist()
+        coordinates = boxes.xyxy.cpu().tolist()
+
+        # Проверяем, пересёк ли автомобиль линию
+
+        for track_id, center_x in zip(track_ids, centers_x):
+
+            if center_x < line_x:
+                side = -1
+            else:
+                side = 1
+
+            if track_id in last_side:
+
+                if last_side[track_id] != side:
+                    crossed_ids.add(track_id)
+
+            last_side[track_id] = side
+
+    # Рисуем рамки обнаруженных автомобилей
+
+    annotated = result.plot(labels=False)
+
+    # Рисуем вертикальную линию
+
+    cv2.line(
+        annotated,
+        (line_x, 0),
+        (line_x, height - 1),
+        (0, 0, 255),
+        2
+    )
+
+    cv2.putText(
+        annotated,
+        "COUNTING LINE",
+        (line_x + 10, 30),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        (0, 0, 255),
+        2
+    )
+
+    # Подписываем автомобили их ID
+
+    for track_id, box in zip(track_ids, coordinates):
+
+        x1, y1, x2, y2 = map(int, box)
+
+        cv2.putText(
+            annotated,
+            "car ID: " + str(track_id),
+            (x1, max(y1 - 10, 20)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (0, 255, 0),
+            2
+        )
+
+    # Отображаем счётчик пересечений
+
+    cv2.putText(
+        annotated,
+        "Crossings: " + str(len(crossed_ids)),
+        (20, 40),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.9,
+        (0, 255, 0),
+        2
+    )
+
+    # Подготавливаем кадр для сохранения
+
+    if width % 2 != 0 or height % 2 != 0:
+
+        annotated = cv2.copyMakeBorder(
+            annotated,
+            0,
+            height % 2,
+            0,
+            width % 2,
+            cv2.BORDER_CONSTANT,
+            value=(0, 0, 0)
+        )
+
+    track_writer.write(annotated)
+
+track_results.close()
+track_writer.release()
+
+print("\nКоличество траекторий с пересечением:", len(crossed_ids))
+print("ID траекторий:", crossed_ids)
+print("Видео с линией:", tracking_video)
+
+
+
+print("\nРезультаты сохранены в:", OUTPUT_FOLDER.resolve())
