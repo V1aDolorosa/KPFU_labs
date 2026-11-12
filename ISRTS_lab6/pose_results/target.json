@@ -1,0 +1,9 @@
+{
+  "status": "TARGET_FOUND",
+  "object_id": 3,
+  "coordinate_frame": "image_px",
+  "x_px": 1157.062679444917,
+  "y_px": 593.0685080816673,
+  "axis_angle_deg": 43.0,
+  "orientation_period_deg": 180
+}
