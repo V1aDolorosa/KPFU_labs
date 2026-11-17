@@ -1,13 +1,9 @@
-
-
 from pathlib import Path
 import json
 import zipfile
 import cv2
 import numpy as np
 import pandas as pd
-
-import matplotlib.pyplot as plt
 
 img = cv2.imread('5_figure_in_1_frame.png')
 H, W = img.shape[:2]
@@ -244,106 +240,8 @@ with zipfile.ZipFile(
         if path.is_file():
             archive.write(path, arcname=path.name)
 
-
-DOWNLOAD_RESULTS = False  # Поставьте True для скачивания.
-
-if DOWNLOAD_RESULTS:
-    print("Для скачивания откройте pose_results.zip в файловом менеджере.")
-
 print("Результаты сохранены в pose_results.zip")
 
 
 def axis_error_deg(measured, reference):
     return abs((measured - reference + 90) % 180 - 90)
-
-
-print("Пример ошибки угла:", axis_error_deg(179, 1), "deg")
-
-
-# Здесь приведены только демонстрационные значения.
-u_ref, v_ref, theta_ref = 250.0, 220.0, 25.0
-u_meas, v_meas, theta_meas = 249.8, 220.3, 25.2
-
-position_error = np.hypot(u_meas - u_ref, v_meas - v_ref)
-angle_error = axis_error_deg(theta_meas, theta_ref)
-
-print("Ошибка положения, px:", position_error)
-print("Ошибка угла, deg:", angle_error)
-
-
-RUN_CALIBRATION = False
-
-# При включении укажите свои точки A, B, C, D:
-SRC = None  # Например: np.float32([[uA,vA], [uB,vB], ...])
-
-SHEET_W_MM = 200.0
-SHEET_H_MM = 140.0
-PX_PER_MM = 4.0
-
-if RUN_CALIBRATION:
-    if SRC is None:
-        raise ValueError("Укажите четыре опорные точки в SRC.")
-
-    src = np.asarray(SRC, dtype=np.float32)
-
-    if src.shape != (4, 2):
-        raise ValueError("SRC должен иметь размер 4 x 2.")
-
-    if SHEET_W_MM <= 0 or SHEET_H_MM <= 0 or PX_PER_MM <= 0:
-        raise ValueError("Размеры и масштаб должны быть положительными.")
-
-    if not cv2.isContourConvex(src.reshape(-1, 1, 2)):
-        raise ValueError("Проверьте порядок и положение точек.")
-
-    if abs(cv2.contourArea(src)) < 100:
-        raise ValueError("Опорные точки образуют слишком малую область.")
-
-    dst = np.float32([
-        [0, 0],
-        [SHEET_W_MM * PX_PER_MM, 0],
-        [SHEET_W_MM * PX_PER_MM, SHEET_H_MM * PX_PER_MM],
-        [0, SHEET_H_MM * PX_PER_MM]
-    ])
-
-    transform = cv2.getPerspectiveTransform(src, dst)
-
-    size = (
-        round(SHEET_W_MM * PX_PER_MM) + 1,
-        round(SHEET_H_MM * PX_PER_MM) + 1
-    )
-
-    rectified = cv2.warpPerspective(
-        img, transform, size,
-        borderValue=(255, 255, 255)
-    )
-
-    _, _, metric_mask = make_mask(
-        rectified, dark_objects=True, kernel_size=3
-    )
-
-    metric, metric_objects = measure_parts(
-        metric_mask,
-        min_area=20 * PX_PER_MM ** 2,
-        min_aspect=MIN_ASPECT
-    )
-
-    metric["x_mm"] = metric["cx_px"] / PX_PER_MM
-    metric["y_mm"] = metric["cy_px"] / PX_PER_MM
-    metric["area_mm2"] = metric["area_px2"] / PX_PER_MM ** 2
-
-    # Отображение откалиброванного изображения
-    cv2.namedWindow("Rectified", cv2.WINDOW_NORMAL)
-    cv2.resizeWindow("Rectified", 1000, 700)
-    cv2.imshow("Rectified", rectified)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-
-    print(metric[[
-        "id", "x_mm", "y_mm", "angle_deg", "area_mm2"
-    ]].round(2))
-
-    metric.to_csv(
-        "measurements_mm.csv",
-        index=False,
-        encoding="utf-8-sig"
-    )
